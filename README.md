@@ -1,3 +1,3 @@
 # Active-Learning
 
-Applying Active Learning thecnics to select images that most improve the classifier.
+Applying Active Learning thecnics to select and annotate images that most improve the classifier.
