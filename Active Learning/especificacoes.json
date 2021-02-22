@@ -1,0 +1,13 @@
+{
+    "training_path":"C:\\Users\\Soares\\Desktop\\UTAD\\Projeto de licenciatura\\Mucosa\\Datasets\\train",
+    "testing_path":"C:\\Users\\Soares\\Desktop\\UTAD\\Projeto de licenciatura\\Mucosa\\Datasets\\test_set_complete",
+    "validation_path":"C:\\Users\\Soares\\Desktop\\UTAD\\Projeto de licenciatura\\Mucosa\\Datasets\\validation",
+    "unlabeled_path":"C:\\Users\\Soares\\Desktop\\UTAD\\Projeto de licenciatura\\Mucosa\\Datasets\\unlabeled",
+    "build_fn":"create_cnn",
+    "query_strategy":"RandomQuery",
+    "accuracy":0.85,
+    "n_instances":2
+}
+
+
+
