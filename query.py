@@ -40,7 +40,7 @@ class RandomSampling(Query):
             raise ValueError("n_instances param is missing")
 
         query_idx = np.random.choice(
-            range(len(self.unlabeled_data)), size=self.n_instances, replace=False
+            range(len(self.unlabeled_data)), size=self.n_instances, replace=True
         )
         return query_idx, self.unlabeled_data[query_idx]
 
@@ -429,7 +429,7 @@ class Highest_Entropy__Clustering_Sampling(Query):
         lista = np.where(most_uncertain_cluster == kmeans.labels_)[0]  # select images from one cluster/label
         
         print(lista.shape)
-        indices = np.random.choice(lista, self.n_instances, replace=False)
+        indices = np.random.choice(lista, self.n_instances, replace=True)
 
         return indices, self.unlabeled_data[indices]
 
