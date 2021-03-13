@@ -1,4 +1,6 @@
-from query import RandomSampling,UncertaintySampling, ClusterBasedSampling,RepresentativeSampling,Uncertainty_With_Clustering_Sampling,Representative_With_Clustering_Sampling,Highest_Entropy__Clustering_Sampling,Uncertainty_With_Representative_sampling,Highest_Entropy__Uncertainty_Sampling
+from query import (
+    ClusterBasedSampling,
+)
 from keras.preprocessing.image import ImageDataGenerator
 from active_learner import ActiveLearner
 import os
@@ -12,6 +14,7 @@ from keras.applications.xception import Xception
 from keras.applications.inception_v3 import InceptionV3
 
 input_shape = (128, 128, 3)
+
 
 def create_cnn():
     model = models.Sequential()
@@ -31,7 +34,8 @@ def create_cnn():
     )
     return model
 
-os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
+
+os.environ["TF_FORCE_GPU_A_LLOW_GROWTH"] = "true"
 
 # read file
 with open("especificacoes.json", "r") as myfile:
@@ -39,7 +43,7 @@ with open("especificacoes.json", "r") as myfile:
 # parse file
 obj = json.loads(data)
 
-datagen = ImageDataGenerator(rescale=1.0 / 255) 
+datagen = ImageDataGenerator(rescale=1.0 / 255)
 train_generator = datagen.flow_from_directory(
     str(obj["training_path"]),
     target_size=(128, 128),
@@ -76,7 +80,7 @@ X_unlabeled, y_unlabeled = next(unlabeled_generator)
 
 learner = ActiveLearner(
     locals()[obj["build_fn"]],
-    Highest_Entropy__Uncertainty_Sampling(X_unlabeled, int(obj["n_instances"])),
+    ClusterBasedSampling(int(obj["n_instances"])),
     X_initial,
     y_initial,
     verbose=0,
