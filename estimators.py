@@ -1,17 +1,19 @@
-from keras import layers, models, optimizers
-from keras.applications.vgg16 import VGG16
-from keras.applications.vgg19 import VGG19
-from keras.applications.resnet50 import ResNet50
-from keras.applications.resnet_v2 import ResNet50V2
-from keras.applications.xception import Xception
-from keras.applications.inception_v3 import InceptionV3
+from tensorflow.keras import layers, models, optimizers
+from tensorflow.keras.applications.vgg16 import VGG16
+from tensorflow.keras.applications.vgg19 import VGG19
+from tensorflow.keras.applications.resnet50 import ResNet50
+from tensorflow.keras.applications.resnet_v2 import ResNet50V2
+from tensorflow.keras.applications.xception import Xception
+from tensorflow.keras.applications.inception_v3 import InceptionV3
+import tensorflow as tf
 
 input_shape = (128, 128, 3)
+tensor = tf.keras.Input(input_shape)
 
 
 def create_cnn():
     model = models.Sequential()
-    model.add(layers.Conv2D(32, (4, 4), activation="relu", input_shape=input_shape))
+    model.add(layers.Conv2D(32, (4, 4), activation="relu"))
     model.add(layers.Conv2D(32, (4, 4), activation="relu"))
     model.add(layers.Conv2D(32, (4, 4), activation="relu"))
     model.add(layers.MaxPooling2D(pool_size=(2, 2)))

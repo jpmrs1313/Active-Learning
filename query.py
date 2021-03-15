@@ -1,126 +1,146 @@
 import numpy as np
-import random
+import tensorflow as tf
+from abc import ABC, abstractmethod
+from tensorflow.keras import backend as K
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics.pairwise import pairwise_distances
-from keras import backend as K
 from modAL.uncertainty import uncertainty_sampling
-from abc import ABC, abstractmethod
-import tensorflow as tf
+
 
 class Query(ABC):
-    def __init__(self, unlabeled_data: np.ndarray, n_instances: int) -> None:
-        self.unlabeled_data = unlabeled_data
+    """
+    Abstract class for active learning query techniques
+    """
+
+    def __init__(
+        self,
+        n_instances: int,
+    ) -> None:
+        """
+        Define the number of instances returned by query techniques
+        """
         self.n_instances = n_instances
 
     @abstractmethod
-    def __call__(self):
+    def __call__(self, classifier, pool):
         """
-        Docs
+        Abstract method called by active learning techniques
+        self-> instance of AL technique
+        classifier -> ML model
+        pool-> set of unlabeled images to be used in AL technique
         """
+
 
 class RandomSampling(Query):
     """
-    Docs here
+    Base AL technic, select images from unlabeled dataset randomly
     """
 
-    def __init__(self, unlabeled_data: np.ndarray, n_instances: int) -> None:
+    def __call__(self, classifier, X):
         """
-        Docs here
-        """
-        super().__init__(unlabeled_data, n_instances)
+        self-> instance of AL technique
+        classifier -> ML model
+        pool-> set of unlabeled images to be used in AL technique
 
-    def __call__(self, *args, **kwargs):
+        returns as images and corresponding indexes
         """
-        Docs here
-        """
-
-        if self.unlabeled_data is None:
-            raise ValueError("unlabeled_data param is missing")
-        if self.n_instances is None:
-            raise ValueError("n_instances param is missing")
-
+        # Select random indices
         query_idx = np.random.choice(
-            range(len(self.unlabeled_data)), size=self.n_instances, replace=True
+            range(len(X)),
+            size=self.n_instances,
+            replace=True,
         )
-        return query_idx, self.unlabeled_data[query_idx]
+        # Return query indices and unlabeled data at those
+        # indices
+        return query_idx, X[query_idx]
+
 
 class UncertaintySampling(Query):
     """
-    Docs here
+    Uncertainty AL technic, select images from unlabeled that has confidence prediction closer from 50% (decision boundary)
     """
 
-    def __init__(self, unlabeled_data: np.ndarray, n_instances: int) -> None:
+    def __call__(self, classifier, X):
         """
-        Docs here
-        """
+        self-> instance of Uncertainty AL technic
+        classifier -> ML model
+        pool-> set of unlabeled images to be used in Uncertainty AL technic
 
-        super().__init__(unlabeled_data, n_instances)
-
-    def __call__(self,learner,X_pool,*args, **kwargs):
+        returns as images and corresponding indexes
         """
-        Docs here
-        """
-        self.unlabeled_data = X_pool
-
-        if learner is None:
-            raise ValueError("learner_data param is missing")
-        if self.unlabeled_data is None:
-            raise ValueError("unlabeled_data param is missing")
-        if self.n_instances is None:
-            raise ValueError("n_instances param is missing")
-        
-        indices = uncertainty_sampling(
-        learner.estimator.model, self.unlabeled_data, n_instances=self.n_instances
+        # Select indices based on uncertainty
+        query_idx = uncertainty_sampling(
+            classifier,
+            X,
+            n_instances=self.n_instances,
         )
-        return indices, self.unlabeled_data[indices]
+        # Return query indices and unlabeled data at those
+        # indices
+        return query_idx, X[query_idx]
+
 
 class ClusterBasedSampling(Query):
-    
     """
-    Docs here
+    Cluster AL technic, split imagens in clusters and select one image by each cluster randomly
     """
-    def __init__(self, unlabeled_data: np.ndarray, n_instances: int) -> None:
-        """
-        Docs here
-        """
 
-        super().__init__(unlabeled_data, n_instances)
-
-    def __call__(self,learner,X_pool, *args, **kwargs):
+    def __call__(self, classifier, X):
         """
-        CLUSTERING BASED SAMPLING
-        group images in n clusters and select randomly one image for each clusters
+        self-> instance of AL technique
+        classifier -> ML model
+        pool-> set of unlabeled images to be used in AL technique
+
+        returns as images and corresponding indexes
         """
-        
-        self.unlabeled_data = X_pool
+        X = X.reshape(len(X), -1)
 
-        if self.unlabeled_data is None:
-            raise ValueError("unlabeled_data param is missing")
-        if self.n_instances is None:
-            raise ValueError("n_instances param is missing")
-        unlabeled_data = self.unlabeled_data.reshape(len(self.unlabeled_data), -1)
-
+        # Instantiate KMeans object
+        # With the number of clusters, equal
+        # to the number of instances
         kmeans = MiniBatchKMeans(n_clusters=self.n_instances, random_state=0)
-        kmeans.fit(unlabeled_data)
 
-        query_idx = self.GetOneIndexOfEachCluster(kmeans, self.n_instances)
-        unlabeled_data = unlabeled_data.reshape(len(unlabeled_data), 128, 128, 3)
-        return query_idx, unlabeled_data[query_idx]
+        # Fit the data
+        kmeans.fit(X)
 
-    def Random(self,list):
-        secure_random = random.SystemRandom()
-        return secure_random.choice(list)
+        # Get one index from each cluster
+        query_idx = self.get_one_index_from_each_cluster(kmeans)
+
+        return query_idx, X[query_idx]
+
+    def get_one_index_from_each_cluster(self, kmeans):
+        """
+        Selects a random point from each cluster.
+        The number of clusters is determined by `n_instances`.
+        """
+        # For each cluster:
+        # (1) Find all the points from X that are assigned to the cluster.
+        # (2) Choose 1 point from tese points randomly.
+        # The number of clusters is `self.n_instances`
+
+        return [
+            int(np.random.choice(np.where(kmeans.labels_ == i)[0], size=1))
+            for i in range(self.n_instances)
+        ]
 
 
-    def GetOneIndexOfEachCluster(self,kmeans, n_clusters):
-        indices = np.zeros(n_clusters)
+# class OutlierSampling(Query):
+#     """
+#     Docs here
+#     """
 
-        for i in range(n_clusters):
-            lista = np.where(i == kmeans.labels_)[0]  # select images from one cluster/label
-            valor = self.Random(lista)
-            indices[i] = valor
+#     def __init__(self, n_instances: int, x_validation: np.ndarray) -> None:
+#         """
+#         Docs here
+#         """
+#         # Save validation data
+#         self.x_validation = x_validation
+#         super().__init__(n_instances)
 
-        return indices.astype(int)
+#     def __call__(self, classifier, X):
+#         # Get per-neuron scores from validation data
+#         validation_rankings = self.get_validation_rankings(
+#             classifier, self.X_validation
+#         )
 
 
 # class OutlierSampling(Query):
@@ -185,7 +205,7 @@ class ClusterBasedSampling(Query):
 #             query_idx.append(outlier[0])
 
 #         return query_idx, self.unlabeled_data[query_idx]
-        
+
 #     def get_rank(self,value, rankings):
 #         """get the rank of the value in an ordered array as a percentage
 
@@ -220,297 +240,142 @@ class ClusterBasedSampling(Query):
 #         return absolute_ranking
 
 #     def get_validation_rankings(self,model, validation_data):
-        # validation_rankings = (
-        #     []
-        # )  # 2D array, every neuron by ordered list of output on validation data per neuron
-        # v = 0
-        # for item in validation_data:
+# validation_rankings = (
+#     []
+# )  # 2D array, every neuron by ordered list of output on validation data per neuron
+# v = 0
+# for item in validation_data:
 
-        #     item = item[np.newaxis, ...]
-        #     # get logit of item
-        #     print(type(model.layers[0].input[0]))
-        #     print(model.layers[0].input[0])
-    
-        #     keras_function =  K.function([model.layers[0].input[0]],[model.layers[-1].output])
-        #     #keras_function = K.function([model.get_input_at(0)], [model.layers[-1].output])
-        #     neuron_outputs = keras_function([item, 1])
+#     item = item[np.newaxis, ...]
+#     # get logit of item
+#     print(type(model.layers[0].input[0]))
+#     print(model.layers[0].input[0])
 
-        #     # initialize array if we haven't yet
-        #     if len(validation_rankings) == 0:
-        #         for output in neuron_outputs:
-        #             validation_rankings.append([0.0] * len(validation_data))
+#     keras_function =  K.function([model.layers[0].input[0]],[model.layers[-1].output])
+#     #keras_function = K.function([model.get_input_at(0)], [model.layers[-1].output])
+#     neuron_outputs = keras_function([item, 1])
 
-        #     n = 0
-        #     for output in neuron_outputs:
-        #         validation_rankings[n][v] = output
-        #         n += 1
+#     # initialize array if we haven't yet
+#     if len(validation_rankings) == 0:
+#         for output in neuron_outputs:
+#             validation_rankings.append([0.0] * len(validation_data))
 
-        #     v += 1
+#     n = 0
+#     for output in neuron_outputs:
+#         validation_rankings[n][v] = output
+#         n += 1
 
-        # # Rank-order the validation scores
-        # v = 0
-        # for validation in validation_rankings:
-        #     validation.sort()
-        #     validation_rankings[v] = validation
-        #     v += 1
+#     v += 1
 
-        # return validation_rankings
+# # Rank-order the validation scores
+# v = 0
+# for validation in validation_rankings:
+#     validation.sort()
+#     validation_rankings[v] = validation
+#     v += 1
+
+# return validation_rankings
+
 
 class RepresentativeSampling(Query):
     """
-    Docs here
+    Representative Sampling is a technic that calculates the difference
+    between the training data and the unlabeled data. 
+    For each unlabeled image is calculated the training score and unlabeled. 
+    The score is the cosine similarity mean between that image and each image of the respective image dataset. 
+    After calculating both scores, representativity is obtained by the dif-ference between the unlabeled score and training score. 
     """
 
-    def __init__(self, unlabeled_data: np.ndarray, n_instances: int) -> None:
+    def __call__(self, classifier, X):
         """
-        Docs here
+        self-> instance of AL technique
+        classifier -> ML model
+        pool-> set of unlabeled images to be used in AL technique
+
+        returns as images and corresponding indexes
         """
-        super().__init__(unlabeled_data, n_instances)
+        # Get training vector
+        (batch_size, length, height, depth) = classifier.X_training.shape
+        train_vector = classifier.X_training.reshape(
+            (
+                batch_size,
+                length * height * depth,
+            )
+        )
 
-    def __call__(self,learner,X_pool, *args, **kwargs):
-        """
-        REPRESENTATIVE SAMPLING
-        select n images calculating the representativity of each image between unlabeled and train images
-        """
+        # Get unlabeled vector
+        (batch_size, length, height, depth) = X.shape
+        unlabeled_vector = X.reshape(
+            (
+                batch_size,
+                length * height * depth,
+            )
+        )
 
-        self.unlabeled_data=X_pool
-        if self.unlabeled_data is None:
-            raise ValueError("unlabeled_data param is missing")
-        if self.n_instances is None:
-            raise ValueError("n_instances param is missing")
+        # Calculate similarities
+        train_similarity = pairwise_distances(
+            unlabeled_vector, train_vector, metric="cosine"
+        )
 
-        len, length, height, depth = learner.X_training.shape
-        vetor_train = learner.X_training.reshape((len, length * height * depth))
-
-        len, length, height, depth = self.unlabeled_data.shape
-        vetor_unlabeled =self.unlabeled_data.reshape((len, length * height * depth))
-
-        train_similarity = pairwise_distances(vetor_unlabeled, vetor_train, metric="cosine")
         unlabeled_similarity = pairwise_distances(
-            vetor_unlabeled, vetor_unlabeled, metric="cosine"
+            unlabeled_vector, unlabeled_vector, metric="cosine"
         )
 
-        representativity = {}
-        index = 0
-        for train_sim, unlabeled_sim in zip(train_similarity, unlabeled_similarity):
-            representativity[index] = np.mean(unlabeled_sim) - np.mean(train_sim)
-            index = index + 1
-
-        representativity = sorted(
-            representativity.items(), key=lambda x: x[1], reverse=True
-        )
-        query_idx = []
-        for r in representativity[:self.n_instances:]:
-            query_idx.append(r[0])
-
-        return query_idx, self.unlabeled_data[query_idx]
-
-class Uncertainty_With_Clustering_Sampling(Query):
-    """
-    Docs here
-    """
-
-    def __init__(self, unlabeled_data: np.ndarray, n_instances: int) -> None:
-        """
-        Docs here
-        """
-        self.uncertainty=UncertaintySampling(unlabeled_data, 500)
-        self.clustering=ClusterBasedSampling(unlabeled_data, n_instances)
-        super().__init__(unlabeled_data, n_instances)
-       
-    def __call__(self,learner,X_pool, *args, **kwargs):
-        """
-        Least Confidence Sampling with Clustering-based Sampling
-
-        Combining Uncertainty and Diversity sampling means applying one technique and then another.
-        this allow select images in different positions of the boarder
-        """
-        self.unlabeled_data = X_pool
-        if learner is None:
-            raise ValueError("Learner param is missing")
-        if self.unlabeled_data is None:
-            raise ValueError("unlabeled_data param is missing")
-        if self.n_instances is None:
-            raise ValueError("n_instances param is missing")
-
-        indices, instancias = self.uncertainty.__call__(learner,self.unlabeled_data)
-        
-        query_idx, data = self.clustering.__call__(learner,self.unlabeled_data)
-        print(query_idx)
-        return query_idx, self.unlabeled_data[query_idx]
-
-class Representative_With_Clustering_Sampling(Query):
-    """
-    Docs here
-    """
-
-    def __init__(self, unlabeled_data: np.ndarray, n_instances: int) -> None:
-        """
-        Docs here
-        """
-        self.representative=RepresentativeSampling(unlabeled_data, 1)
-        super().__init__(unlabeled_data, n_instances)
-       
-    def __call__(self,learner,X_pool, *args, **kwargs):
-        """
-        muito lento
-        """
-        
-        self.unlabeled_data=X_pool
-
-        if learner is None:
-            raise ValueError("Learner param is missing")
-        if self.unlabeled_data is None:
-            raise ValueError("unlabeled_data param is missing")
-        if self.n_instances is None:
-            raise ValueError("n_instances param is missing")
-        
-        self.unlabeled_data = self.unlabeled_data.reshape(len(self.unlabeled_data), -1)
-
-        kmeans = MiniBatchKMeans(n_clusters=self.n_instances, random_state=0)
-        kmeans.fit(self.unlabeled_data)
-
-        unlabeled_data = self.unlabeled_data.reshape(len(self.unlabeled_data), 128, 128, 3)
-        indices = []
-
-        for i in range(self.n_instances):
-            lista = np.where(i == kmeans.labels_)[0]  # select images from one cluster/label
-            query_idx, unlabeled_data[query_idx] = self.representative.__call__(learner, unlabeled_data[lista])
-            indices.append(int(lista[query_idx]))
-
-        return indices, unlabeled_data[indices]
-
-class Highest_Entropy__Clustering_Sampling(Query):
-    """
-    Docs here
-    """
-
-    def __init__(self, unlabeled_data: np.ndarray, n_instances: int) -> None:
-        """
-        Docs here
-        """
-        self.representative=RepresentativeSampling(unlabeled_data, 1)
-        self.n_clusters=10
-        super().__init__(unlabeled_data, n_instances)
-       
-    def __call__(self,learner,X_pool, *args, **kwargs):
-        """
-        Sampling from the Highest Entropy Cluster
-        Select n images from the cluster where the images have more entropy (average incertainty is bigger)
-        """
-
-        self.unlabeled_data=X_pool
-
-        if learner is None:
-            raise ValueError("Learner param is missing")
-        if self.unlabeled_data is None:
-            raise ValueError("unlabled_data param is missing")
-        if self.n_instances is None:
-            raise ValueError("n_instances param is missing")
-       
-        highest_average_Uncertainty = 1
-        self.unlabeled_data = self.unlabeled_data.reshape(len(self.unlabeled_data), -1)
-
-        kmeans = MiniBatchKMeans(n_clusters=self.n_clusters, random_state=0)
-        kmeans.fit(self.unlabeled_data)
-
-        self.unlabeled_data = self.unlabeled_data.reshape(len(self.unlabeled_data), 128, 128, 3)
-
-        for i in range(self.n_clusters):
-            lista = np.where(i == kmeans.labels_)[0]  # select images from cluster i
-            probabilidades = learner.predict_proba(self.unlabeled_data[lista])
-            incertezas = [abs(i[0] - i[1]) for i in probabilidades]
-            average_Uncertainty = np.mean(incertezas)
-
-            if average_Uncertainty < highest_average_Uncertainty:
-                highest_average_Uncertainty = average_Uncertainty
-                most_uncertain_cluster = i
-
-        lista = np.where(most_uncertain_cluster == kmeans.labels_)[0]  # select images from one cluster/label
-        
-        print(lista.shape)
-        indices = np.random.choice(lista, self.n_instances, replace=True)
-
-        return indices, self.unlabeled_data[indices]
-
-class Uncertainty_With_Representative_sampling(Query):
-    """
-    Docs here
-    """
-
-    def __init__(self, unlabeled_data: np.ndarray, n_instances: int) -> None:
-        """
-        Docs here
-        """
-        self.uncertainty=UncertaintySampling(unlabeled_data,500)
-        self.representative=RepresentativeSampling(unlabeled_data,  n_instances)
-      
-        super().__init__(unlabeled_data, n_instances)
-       
-    def __call__(self,learner,X_pool, *args, **kwargs):
-        
-        self.unlabeled_data=X_pool
-
-        if learner is None:
-            raise ValueError("Learner param is missing")
-        if self.unlabeled_data is None:
-            raise ValueError("unlabeled_data param is missing")
-        if self.n_instances is None:
-            raise ValueError("n_instances param is missing")
-        
-        indices, instancias = self.uncertainty.__call__(
-            learner,
-            self.unlabeled_data,
-            self.uncertainty.n_instances,
-        )
-        
-        query_idx, data = self.representative.__call__(
-            learner, instancias, self.representative.n_instances
-        )
-        return indices[query_idx], data
-
-class Highest_Entropy__Uncertainty_Sampling(Query):
-    """
-    Docs here
-    """
-
-    def __init__(self, unlabeled_data: np.ndarray, n_instances: int) -> None:
-        """
-        Docs here
-        """
-
-        self.highest_entropy_clustering=Highest_Entropy__Clustering_Sampling(unlabeled_data,100)
-        self.uncertainty=UncertaintySampling(unlabeled_data,n_instances)
-      
-        super().__init__(unlabeled_data, n_instances)
-       
-    def __call__(self,learner,X_pool, *args, **kwargs):
-        
-
-        if learner is None:
-            raise ValueError("Learner param is missing")
-        if self.unlabeled_data is None:
-            raise ValueError("unlabeled_data param is missing")
-        if self.n_instances is None:
-            raise ValueError("n_instances param is missing")
-        
-        indices, instancias = self.highest_entropy_clustering.__call__(
-            learner,self.unlabeled_data,
-        )
-        
-        print(indices.shape)
-        query_idx, data = self.uncertainty.__call__(
-            learner, instancias, self.n_instances
+        representativity = np.fromiter(
+            (
+                np.mean(unlabeled_sim) - np.mean(train_sim)
+                for train_sim, unlabeled_sim in zip(
+                    train_similarity, unlabeled_similarity
+                )
+            ),
+            dtype=float,
         )
 
-        print(query_idx.shape)
-        return indices[query_idx], data
+        # Select first n elements (`n_instances`)
+        # (Most representative ones)
+        query_idx = (-representativity).argsort()[: self.n_instances]
+
+        return query_idx, X[query_idx]
 
 
+class UncertaintyWithClusteringSampling(Query):
+    """
+    Least Confidence Sampling with Clustering-based Sampling
+    Combining Uncertainty and Diversity sampling means applying one technique and then another.
+    this allow select images in different positions of the boarder
+    """
 
+    def __init__(self, n_instances: int) -> None:
+        """
+        Init UncertantySampling, ClusterBasedSampling and abstract class
+        """
+        self.uncertainty_sampling = UncertaintySampling(
+            n_instances=500,
+        )
+        self.clustering_based_sampling = ClusterBasedSampling(
+            n_instances=n_instances,
+        )
+        super().__init__(n_instances)
 
+    def __call__(self, classifier, X):
+        """
+        self-> instance of AL technique
+        classifier -> ML model
+        pool-> set of unlabeled images to be used in AL technique
 
+        returns as images and corresponding indexes
+        """
+        indices, _ = self.uncertainty_sampling.__call__(
+            classifier,
+            X,
+        )
 
+        query_idx, _ = self.clustering_based_sampling(
+            classifier,
+            X[indices],
+        )
+
+        return indices[query_idx], X[indices[query_idx]]
 
 # def Uncertainty_With_ModelOutliers_sampling(**kwargs):
 #     """
@@ -552,6 +417,185 @@ class Highest_Entropy__Uncertainty_Sampling(Query):
 #     )
 
 
+
+class RepresentativeWithClusteringSampling(Query):
+    """
+    Representative Sampling Cluster-based Sampling is an approach that clusters unlabeled
+    images and then calculates which image is the most representative by cluster.
+    """
+
+    def __init__(self, n_instances: int) -> None:
+        """
+        Init RepresentativeSampling and abstract class
+        """
+        self.representative_sampling = RepresentativeSampling(
+            n_instances=1,
+        )
+        super().__init__(n_instances)
+
+    def __call__(self, classifier, X):
+        """
+        self-> instance of AL technique
+        classifier -> ML model
+        pool-> set of unlabeled images to be used in AL technique
+
+        returns as images and corresponding indexes
+        """
+        (batch_size, length, height, depth) = X.shape
+        X = X.reshape(len(X), -1)
+
+        # Instantiate clustering object
+        kmeans = MiniBatchKMeans(n_clusters=self.n_instances, random_state=0)
+
+        kmeans.fit(X)
+
+        query_idx = []
+
+        # Iterate over each cluster
+        for i in range(self.n_instances):
+
+            # Get cluster indices
+            cluster_indices = np.where(kmeans.labels_ == i)[0].tolist()
+ 
+            images=X[cluster_indices].reshape(len(X[cluster_indices]),length, height, depth)
+            # Get most representative from each cluster
+            indice, _ = self.representative_sampling.__call__(
+                classifier,
+                images,
+            )
+
+            query_idx.append(cluster_indices[int(indice)])
+
+        return query_idx, X[query_idx]
+
+
+class HighestEntropyClusteringSampling(Query):
+    """
+    Sampling from the Highest Entropy Cluster
+    Select n images from the cluster where the images have more entropy (average incertainty is bigger)
+    """
+
+    def __init__(self, n_instances: int) -> None:
+        self.n_clusters = 10
+        super().__init__(n_instances)
+
+    def __call__(self, classifier, X):
+        """
+        self-> instance of AL technique
+        classifier -> ML model
+        pool-> set of unlabeled images to be used in AL technique
+
+        returns as images and corresponding indexes
+        """
+
+        (batch_size, length, height, depth) = X.shape
+        X = X.reshape(len(X), -1)
+
+        # Instantiate clustering object
+        kmeans = MiniBatchKMeans(n_clusters=self.n_instances, random_state=0)
+
+        kmeans.fit(X)
+
+        clusters_average_uncertainty = []
+
+        # Iterate over each cluster
+        for i in range(self.n_clusters):
+            # Get cluster indices
+            cluster_indices = np.where(kmeans.labels_ == i)[0].tolist()
+            # Use the indices to compute probabilities
+            
+            images=X[cluster_indices].reshape(len(X[cluster_indices]),length, height, depth)
+            
+            #this mis deprecated, now model.predict return probabilities of prediction values
+
+            probabilities=classifier.predict_proba(images)
+
+            print(probabilities)
+            # Compute uncertanties
+            uncertanties = [abs(i[0] - i[1]) for i in probabilities]
+            clusters_average_uncertainty.append(np.mean(uncertanties))
+
+        # Get the index of the most uncertain cluster
+        most_uncertain_cluster = np.argmax(clusters_average_uncertainty)
+        # Get indices from must uncertain cluster
+        cluster_indices = np.where(kmeans.labels_ == most_uncertain_cluster)[0].tolist()
+        # Select random elements from cluster
+        query_idx = np.random.choice(cluster_indices, self.n_instances, replace=True)
+
+        X=X.reshape(len(X),length, height, depth)
+
+        return query_idx, X[query_idx]
+
+
+class UncertaintyWithRepresentativeSampling(Query):
+    """
+    samples unlabeled images by uncertainty and 
+    then filters them using a Diversity Sampling technique called Representative Sampling. 
+    """
+
+    def __init__(self, n_instances: int) -> None:
+        self.uncertainty_sampling = UncertaintySampling(n_instances=500)
+        self.representative_sampling = RepresentativeSampling(n_instances=n_instances)
+        super().__init__(n_instances)
+
+    def __call__(self, classifier, X):
+        """
+        self-> instance of AL technique
+        classifier -> ML model
+        pool-> set of unlabeled images to be used in AL technique
+
+        returns as images and corresponding indexes
+        """
+        # Get query idx from Uncertainty Sampling
+        query_idx, instances = self.uncertainty_sampling.__call__(classifier, X)
+
+        # Use these previous instances in Representative Sampling
+        indices, instances = self.representative_sampling.__call__(
+            classifier, instances
+        )
+
+        return query_idx[indices], instances
+
+
+class HighestEntropyUncertaintySampling(Query):
+    """
+    High Uncertainty Cluster and then applies the Uncertainty Sampling 
+    to the result. With this technic, the images that will be sampled are
+    the most uncertainty images from the most uncertainty cluster 
+
+    """
+
+    def __init__(self, n_instances: int) -> None:
+        self.highest_entropy_clustering_sampling = HighestEntropyClusteringSampling(
+            n_instances=100
+        )
+        super().__init__(n_instances)
+
+    def __call__(self, classifier, X):
+        """
+        self-> instance of AL technique
+        classifier -> ML model
+        pool-> set of unlabeled images to be used in AL technique
+
+        returns as images and corresponding indexes
+        """
+
+        # Use highest entropy clustering first
+        entropy_clustering_indices,instances=self.highest_entropy_clustering_sampling.__call__(classifier, X)
+        # Get the most uncertain ones
+        print(entropy_clustering_indices)
+        query_idx= uncertainty_sampling(
+            classifier,
+            instances,
+            n_instances=self.n_instances,
+        )
+        print(entropy_clustering_indices[query_idx])
+        return (entropy_clustering_indices[query_idx], instances)
+
+
+
+
+
 # def Model_Outliers_With_Representative_sampling(**kwargs):
 #     """
 #     Model-based Outliers and Representative Sampling
@@ -582,39 +626,3 @@ class Highest_Entropy__Uncertainty_Sampling(Query):
 #     )
 #     return indices[query_idx], data
 
-
-# def Uncertainty_ModelOutliers_and_Clustering(**kwargs):
-#     """
-#     Uncertainty Sampling with Model-based Outliers and Clustering
-
-#     the previous method might over-sample items that are very close to each other,
-#     you might want to implement this strategy and then clustering to ensure diversity.
-#     """
-#     n_Uncertainty_instances = kwargs.get("n_Uncertainty_instances", 500)
-#     learner = kwargs.get("learner")
-#     unlabeled_data = kwargs.get("unlabeled_data")
-#     validation_data = kwargs.get("validation_data")
-#     n_instances = kwargs.get("n_instances")
-#     if learner is None:
-#         raise ValueError("Learner param is missing")
-#     if unlabeled_data is None:
-#         raise ValueError("unlabeled_data param is missing")
-#     if n_instances is None:
-#         raise ValueError("n_instances param is missing")
-#     if validation_data is None:
-#         raise ValueError("validation_data param is missing")
-#     indices, instancias = Uncertainty_With_ModelOutliers_sampling(
-#         learner=learner,
-#         unlabeled_data=unlabeled_data,
-#         validation_data=validation_data,
-#         n_instances=n_Uncertainty_instances,
-#     )
-#     query_idx, data = cluster_based_sampling(
-#         unlabeled_data=instancias, n_instances=n_instances
-#     )
-#     return (
-#         indices[
-#             query_idx,
-#         ],
-#         data,
-#     )

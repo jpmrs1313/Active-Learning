@@ -1,8 +1,9 @@
-from keras import optimizers
+from tensorflow.keras import optimizers
 import numpy as np
 import matplotlib.pyplot as plt
 from modAL.models import ActiveLearner
-from keras.wrappers.scikit_learn import KerasClassifier
+from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
+
 from query import Query
 
 
@@ -16,6 +17,10 @@ class ActiveLearner(ActiveLearner):
         **fit_kwargs,
     ) -> None:
 
+        '''
+        initiate Active learning instance with Deep Learning classifier,
+        AL technic, X and Y training data
+        '''
         super().__init__(
             KerasClassifier(build_fn),
             query_strategy,
@@ -30,8 +35,8 @@ class ActiveLearner(ActiveLearner):
         y_test,
         X_unlabeled,
         accuracy_goal,
-    ) :
-    
+    ):
+
         # accuracy of model with initialize images
         model_accuracy = self.score(X_test, y_test, verbose=0)
         print("\nAccuracy after query {n}: {acc:0.4f}".format(n=0, acc=model_accuracy))
