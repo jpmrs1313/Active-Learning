@@ -43,7 +43,8 @@ class ActiveLearner(ActiveLearner):
 
         accuracy_values = [model_accuracy]
 
-        for index in range(1, 21):
+        i=1
+        while (model_accuracy<accuracy_goal):
 
             query_idx, _ = self.query(X_unlabeled)
             new_y = [self.label(X_unlabeled, indice) for indice in query_idx]
@@ -55,12 +56,10 @@ class ActiveLearner(ActiveLearner):
             X_unlabeled = np.delete(X_unlabeled, query_idx, axis=0)
             print(
                 "\nAccuracy after query {n}: {acc:0.4f}".format(
-                    n=index, acc=model_accuracy
+                    n=i, acc=model_accuracy
                 )
             )
-
-            if model_accuracy >= accuracy_goal:
-                break
+            i=i+1
 
         return accuracy_values
 

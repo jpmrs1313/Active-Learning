@@ -5,6 +5,7 @@ from tensorflow.keras import backend as K
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics.pairwise import pairwise_distances
 from modAL.uncertainty import uncertainty_sampling
+from tensorflow.keras.models import Model
 
 
 class Query(ABC):
@@ -123,158 +124,140 @@ class ClusterBasedSampling(Query):
         ]
 
 
-# class OutlierSampling(Query):
-#     """
-#     Docs here
-#     """
-
-#     def __init__(self, n_instances: int, x_validation: np.ndarray) -> None:
-#         """
-#         Docs here
-#         """
-#         # Save validation data
-#         self.x_validation = x_validation
-#         super().__init__(n_instances)
-
-#     def __call__(self, classifier, X):
-#         # Get per-neuron scores from validation data
-#         validation_rankings = self.get_validation_rankings(
-#             classifier, self.X_validation
-#         )
 
 
-# class OutlierSampling(Query):
-#     """
-#     Docs here
-#     """
+class OutlierSampling(Query):
+    """
+    Docs here
+    """
 
-#     def __init__(self, unlabeled_data: np.ndarray, n_instances: int,**kwargs) -> None:
-#         """
-#         Docs here
-#         """
-#         self.X_validation=kwargs.get("X_validation")
+    def __init__(self, n_instances: int,**kwargs) -> None:
+        """
+        Docs here
+        """
+        self.X_validation=kwargs.get("X_validation")
 
 
-#         super().__init__(unlabeled_data, n_instances)
+        super().__init__(n_instances)
 
-#     def __call__(self,learner, X_pool, *args, **kwargs):
-#         """
-#         Docs here
-#         """
-#         self.unlabeled_data = X_pool,
+    def __call__(self,learner, X_pool, *args, **kwargs):
+        """
+        Docs here
+        """
+        self.unlabeled_data = X_pool,
 
-#         if learner is None:
-#             raise ValueError("learner_data param is missing")
-#         if self.unlabeled_data is None:
-#             raise ValueError("unlabeled_data param is missing")
-#         if self.n_instances is None:
-#             raise ValueError("n_instances param is missing")
-#         if self.X_validation is None:
-#             raise ValueError("X_validation param is missing")
+        if learner is None:
+            raise ValueError("learner_data param is missing")
 
-#         model = learner.estimator.model
-#         # Get per-neuron scores from validation data
-#         validation_rankings = self.get_validation_rankings(model, self.X_validation)
 
-#         index = 0
-#         # outliers = {}
-#         outliers_rank = {}
-#         for item in self.unlabeled_data:
+        model = learner.estimator.model
+        # Get per-neuron scores from validation data
+        validation_rankings = self.get_validation_rankings(model, self.X_validation)
 
-#             item = item[np.newaxis, ...]
-#             # get logit of item
+        index = 0
+        # outliers = {}
+        outliers_rank = {}
+        for item in self.unlabeled_data:
 
-#             # keras_function =  K.function([model.layers[0].input],[model.layers[-1].output])
-#             keras_function = K.function([model.get_input_at(0)], [model.layers[-1].output])
-#             neuron_outputs = keras_function([item, 1])
+            item = item[np.newaxis, ...]
+            # get logit of item
 
-#             n = 0
-#             ranks = []
-#             for output in neuron_outputs:
-#                 rank = self.get_rank(output, validation_rankings[n])
-#                 ranks.append(rank)
-#                 n += 1
+            #TODO get logit and save in neuron_outputs
 
-#             outliers_rank[index] = 1 - (sum(ranks) / len(neuron_outputs))  # average rank
-#             index = index + 1
+            # keras_function =  K.function([model.layers[0].input],[model.layers[-1].output])
+            keras_function = K.function([model.get_input_at(0)], [model.layers[-1].output])
+            
+            
+            neuron_outputs = keras_function([item, 1])
 
-#         outliers_rank = sorted(outliers_rank.items(), key=lambda x: x[1], reverse=True)
+            n = 0
+            ranks = []
+            for output in neuron_outputs:
+                rank = self.get_rank(output, validation_rankings[n])
+                ranks.append(rank)
+                n += 1
 
-#         query_idx = []
-#         for outlier in outliers_rank[:self.n_instances:]:
-#             query_idx.append(outlier[0])
+            outliers_rank[index] = 1 - (sum(ranks) / len(neuron_outputs))  # average rank
+            index = index + 1
 
-#         return query_idx, self.unlabeled_data[query_idx]
+        outliers_rank = sorted(outliers_rank.items(), key=lambda x: x[1], reverse=True)
 
-#     def get_rank(self,value, rankings):
-#         """get the rank of the value in an ordered array as a percentage
+        query_idx = []
+        for outlier in outliers_rank[:self.n_instances:]:
+            query_idx.append(outlier[0])
 
-#         Keyword arguments:
-#             value -- the value for which we want to return the ranked value
-#             rankings -- the ordered array in which to determine the value's ranking
+        return query_idx, self.unlabeled_data[query_idx]
 
-#         returns linear distance between the indexes where value occurs, in the
-#         case that there is not an exact match with the ranked values
-#         """
+    def get_rank(self,value, rankings):
+        """get the rank of the value in an ordered array as a percentage
 
-#         index = 0  # default: ranking = 0
+        Keyword arguments:
+            value -- the value for which we want to return the ranked value
+            rankings -- the ordered array in which to determine the value's ranking
 
-#         for ranked_number in rankings:
-#             if value < ranked_number:
-#                 break  # NB: this O(N) loop could be optimized to O(log(N))
-#             index += 1
+        returns linear distance between the indexes where value occurs, in the
+        case that there is not an exact match with the ranked values
+        """
 
-#         if index >= len(rankings):
-#             index = len(rankings)  # maximum: ranking = 1
+        index = 0  # default: ranking = 0
 
-#         elif index > 0:
-#             # get linear interpolation between the two closest indexes
+        for ranked_number in rankings:
+            if value < ranked_number:
+                break  # NB: this O(N) loop could be optimized to O(log(N))
+            index += 1
 
-#             diff = rankings[index] - rankings[index - 1]
-#             perc = value - rankings[index - 1]
-#             linear = perc / diff
-#             index = float(index - 1) + linear
+        if index >= len(rankings):
+            index = len(rankings)  # maximum: ranking = 1
 
-#         absolute_ranking = index / len(rankings)
+        elif index > 0:
+            # get linear interpolation between the two closest indexes
 
-#         return absolute_ranking
+            diff = rankings[index] - rankings[index - 1]
+            perc = value - rankings[index - 1]
+            linear = perc / diff
+            index = float(index - 1) + linear
 
-#     def get_validation_rankings(self,model, validation_data):
-# validation_rankings = (
-#     []
-# )  # 2D array, every neuron by ordered list of output on validation data per neuron
-# v = 0
-# for item in validation_data:
+        absolute_ranking = index / len(rankings)
 
-#     item = item[np.newaxis, ...]
-#     # get logit of item
-#     print(type(model.layers[0].input[0]))
-#     print(model.layers[0].input[0])
+        return absolute_ranking
 
-#     keras_function =  K.function([model.layers[0].input[0]],[model.layers[-1].output])
-#     #keras_function = K.function([model.get_input_at(0)], [model.layers[-1].output])
-#     neuron_outputs = keras_function([item, 1])
+    def get_validation_rankings(self,model, validation_data):
+        validation_rankings = (
+            []
+        )  # 2D array, every neuron by ordered list of output on validation data per neuron
+        v = 0
+        for item in validation_data:
 
-#     # initialize array if we haven't yet
-#     if len(validation_rankings) == 0:
-#         for output in neuron_outputs:
-#             validation_rankings.append([0.0] * len(validation_data))
+            item = item[np.newaxis, ...]
+            # get logit of item
 
-#     n = 0
-#     for output in neuron_outputs:
-#         validation_rankings[n][v] = output
-#         n += 1
+            #TODO get logit and save in neuron_outputs
 
-#     v += 1
+            #keras_function =  K.function([model.layers[0].input[0]],[model.layers[-1].output])
+            keras_function = K.function([model.get_input_at(0)], [model.layers[-1].output])
 
-# # Rank-order the validation scores
-# v = 0
-# for validation in validation_rankings:
-#     validation.sort()
-#     validation_rankings[v] = validation
-#     v += 1
+            neuron_outputs = keras_function([item, 1])
 
-# return validation_rankings
+            # initialize array if we haven't yet
+            if len(validation_rankings) == 0:
+                for output in neuron_outputs:
+                    validation_rankings.append([0.0] * len(validation_data))
+
+            n = 0
+            for output in neuron_outputs:
+                validation_rankings[n][v] = output
+                n += 1
+
+            v += 1
+
+        # Rank-order the validation scores
+        v = 0
+        for validation in validation_rankings:
+            validation.sort()
+            validation_rankings[v] = validation
+            v += 1
+
+        return validation_rankings
 
 
 class RepresentativeSampling(Query):
@@ -510,7 +493,6 @@ class HighestEntropyClusteringSampling(Query):
 
             probabilities=classifier.predict_proba(images)
 
-            print(probabilities)
             # Compute uncertanties
             uncertanties = [abs(i[0] - i[1]) for i in probabilities]
             clusters_average_uncertainty.append(np.mean(uncertanties))
@@ -583,13 +565,11 @@ class HighestEntropyUncertaintySampling(Query):
         # Use highest entropy clustering first
         entropy_clustering_indices,instances=self.highest_entropy_clustering_sampling.__call__(classifier, X)
         # Get the most uncertain ones
-        print(entropy_clustering_indices)
         query_idx= uncertainty_sampling(
             classifier,
             instances,
             n_instances=self.n_instances,
         )
-        print(entropy_clustering_indices[query_idx])
         return (entropy_clustering_indices[query_idx], instances)
 
 
