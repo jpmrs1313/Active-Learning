@@ -9,14 +9,15 @@ from query import (
     UncertaintyWithRepresentativeSampling,
     HighestEntropyUncertaintySampling,
     OutlierSampling,
+    OutliersWithRepresentativeSampling,
+    UncertaintyWithModelOutliersSampling
 )
+
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from active_learner import ActiveLearner
 import os
 import json
 from estimators import *
-
-
 
 os.environ["TF_FORCE_GPU_A_LLOW_GROWTH"] = "true"
 
@@ -51,7 +52,7 @@ validation_generator = datagen.flow_from_directory(
 unlabeled_generator = datagen.flow_from_directory(
     str(obj["unlabeled_path"]),
     target_size=(128, 128),
-    batch_size=2200,
+    batch_size=200,
     class_mode="binary",
     shuffle=False,
 )
@@ -62,21 +63,9 @@ X_validation, y_validation = next(validation_generator)
 X_unlabeled, y_unlabeled = next(unlabeled_generator)
 
 
-
-#TODO é necessário alterar a técnica, vou deixar comentado a outlier sampling que é a tecnica que nao está a funcionar corretamente.
-#OutlierSampling necessita dos dados de validaçao
-
-# learner = ActiveLearner(
-#     locals()[obj["build_fn"]],
-#     OutlierSampling(int(obj["n_instances"]),X_validation=X_validation),
-#     X_initial,
-#     y_initial,
-#     verbose=0
-# )
-
 learner = ActiveLearner(
     locals()[obj["build_fn"]],
-    UncertaintySampling(int(obj["n_instances"])),
+    OutliersWithRepresentativeSampling(int(obj["n_instances"]),X_validation=X_validation),
     X_initial,
     y_initial,
     verbose=0

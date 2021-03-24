@@ -5,7 +5,7 @@ from tensorflow.keras import backend as K
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics.pairwise import pairwise_distances
 from modAL.uncertainty import uncertainty_sampling
-from tensorflow.keras.models import Model
+
 
 
 class Query(ABC):
@@ -124,8 +124,6 @@ class ClusterBasedSampling(Query):
         ]
 
 
-
-
 class OutlierSampling(Query):
     """
     Docs here
@@ -154,39 +152,35 @@ class OutlierSampling(Query):
         # Get per-neuron scores from validation data
         validation_rankings = self.get_validation_rankings(model, self.X_validation)
 
-        index = 0
-        # outliers = {}
-        outliers_rank = {}
-        for item in self.unlabeled_data:
+        index=0
+        #outliers = {}
+        outliers_rank={}
+        for item in X_pool:
 
-            item = item[np.newaxis, ...]
-            # get logit of item
+            item=item[np.newaxis,...]
+            #get logit of item
+        
+            keras_function = K.function([model.input], [model.layers[-1].output])
+            neuron_outputs=keras_function([item, 1])
 
-            #TODO get logit and save in neuron_outputs
-
-            # keras_function =  K.function([model.layers[0].input],[model.layers[-1].output])
-            keras_function = K.function([model.get_input_at(0)], [model.layers[-1].output])
             
-            
-            neuron_outputs = keras_function([item, 1])
-
-            n = 0
+            n=0
             ranks = []
             for output in neuron_outputs:
                 rank = self.get_rank(output, validation_rankings[n])
                 ranks.append(rank)
-                n += 1
-
-            outliers_rank[index] = 1 - (sum(ranks) / len(neuron_outputs))  # average rank
-            index = index + 1
-
-        outliers_rank = sorted(outliers_rank.items(), key=lambda x: x[1], reverse=True)
-
-        query_idx = []
+                n += 1 
+            
+            outliers_rank[index] = 1 - (sum(ranks) / len(neuron_outputs)) # average rank
+            index=index+1
+                
+        outliers_rank = sorted(outliers_rank.items(), key=lambda x: x[1], reverse=True) 
+        
+        query_idx=[]
         for outlier in outliers_rank[:self.n_instances:]:
             query_idx.append(outlier[0])
-
-        return query_idx, self.unlabeled_data[query_idx]
+                                
+        return query_idx, X_pool[query_idx]
 
     def get_rank(self,value, rankings):
         """get the rank of the value in an ordered array as a percentage
@@ -199,64 +193,59 @@ class OutlierSampling(Query):
         case that there is not an exact match with the ranked values
         """
 
-        index = 0  # default: ranking = 0
-
+        index = 0 # default: ranking = 0
+        
         for ranked_number in rankings:
             if value < ranked_number:
-                break  # NB: this O(N) loop could be optimized to O(log(N))
-            index += 1
-
-        if index >= len(rankings):
-            index = len(rankings)  # maximum: ranking = 1
-
-        elif index > 0:
-            # get linear interpolation between the two closest indexes
-
+                break #NB: this O(N) loop could be optimized to O(log(N))
+            index += 1        
+        
+        if(index >= len(rankings)):
+            index = len(rankings) # maximum: ranking = 1
+            
+        elif(index > 0):
+            # get linear interpolation between the two closest indexes 
+            
             diff = rankings[index] - rankings[index - 1]
             perc = value - rankings[index - 1]
             linear = perc / diff
             index = float(index - 1) + linear
-
+        
         absolute_ranking = index / len(rankings)
-
-        return absolute_ranking
+    
+        return (absolute_ranking)
 
     def get_validation_rankings(self,model, validation_data):
-        validation_rankings = (
-            []
-        )  # 2D array, every neuron by ordered list of output on validation data per neuron
-        v = 0
+        
+        validation_rankings = [] # 2D array, every neuron by ordered list of output on validation data per neuron    
+        v=0
         for item in validation_data:
+            
+            item=item[np.newaxis,...]
+            #get logit of item
 
-            item = item[np.newaxis, ...]
-            # get logit of item
-
-            #TODO get logit and save in neuron_outputs
-
-            #keras_function =  K.function([model.layers[0].input[0]],[model.layers[-1].output])
-            keras_function = K.function([model.get_input_at(0)], [model.layers[-1].output])
-
-            neuron_outputs = keras_function([item, 1])
+            keras_function = K.function([model.input], [model.layers[-1].output])
+            neuron_outputs=keras_function([item, 1])
 
             # initialize array if we haven't yet
             if len(validation_rankings) == 0:
                 for output in neuron_outputs:
                     validation_rankings.append([0.0] * len(validation_data))
-
-            n = 0
+                        
+            n=0
             for output in neuron_outputs:
                 validation_rankings[n][v] = output
                 n += 1
-
+                        
             v += 1
-
-        # Rank-order the validation scores
-        v = 0
+        
+        # Rank-order the validation scores 
+        v=0
         for validation in validation_rankings:
-            validation.sort()
+            validation.sort() 
             validation_rankings[v] = validation
             v += 1
-
+          
         return validation_rankings
 
 
@@ -360,45 +349,47 @@ class UncertaintyWithClusteringSampling(Query):
 
         return indices[query_idx], X[indices[query_idx]]
 
-# def Uncertainty_With_ModelOutliers_sampling(**kwargs):
-#     """
-#     Uncertainty Sampling with Model-based Outliers
 
-#     When Combining Uncertainty Sampling with Model-based Outliers, you are maximizing your model’s current confusion.
-#     You are looking for items near the decision boundary and making sure that their features are relatively unknown
-#     to the current model.
-#     """
-#     n_Uncertainty_instances = kwargs.get("n_Uncertainty_instances", 500)
-#     learner = kwargs.get("learner")
-#     unlabeled_data = kwargs.get("unlabeled_data")
-#     validation_data = kwargs.get("validation_data")
-#     n_instances = kwargs.get("n_instances")
-#     if learner is None:
-#         raise ValueError("Learner param is missing")
-#     if unlabeled_data is None:
-#         raise ValueError("unlabeled_data param is missing")
-#     if n_instances is None:
-#         raise ValueError("n_instances param is missing")
-#     if validation_data is None:
-#         raise ValueError("validation_data param is missing")
-#     indices, instancias = Uncertainty(
-#         learner=learner,
-#         unlabeled_data=unlabeled_data,
-#         n_instances=n_Uncertainty_instances,
-#     )
-#     query_idx, data = outlier_sampling(
-#         learner=learner,
-#         unlabeled_data=instancias,
-#         validation_data=validation_data,
-#         n_instances=n_instances,
-#     )
-#     return (
-#         indices[
-#             query_idx,
-#         ],
-#         data,
-#     )
+class UncertaintyWithModelOutliersSampling(Query):
+    """
+    Uncertainty Sampling with Model-based Outliers
 
+    When Combining Uncertainty Sampling with Model-based Outliers, you are maximizing your model’s current confusion.
+    You are looking for items near the decision boundary and making sure that their features are relatively unknown
+    to the current model.
+    """
+    def __init__(self, n_instances: int,**kwargs) -> None:
+        """
+        Init UncertantySampling, ClusterBasedSampling and abstract class
+        """
+
+        self.uncertainty_sampling = UncertaintySampling(
+            n_instances=100,
+        )
+        self.outlier_sampling = OutlierSampling(
+            n_instances,X_validation=kwargs.get("X_validation")
+        )
+        super().__init__(n_instances)
+    
+    def __call__(self, classifier, X_pool):
+        """
+        self-> instance of AL technique
+        classifier -> ML model
+        pool-> set of unlabeled images to be used in AL technique
+
+        returns as images and corresponding indexes
+        """
+        indices, _ = self.uncertainty_sampling.__call__(
+            classifier,
+            X_pool,
+        )
+
+        query_idx, _ = self.outlier_sampling(
+            classifier,
+            X_pool[indices]
+        )
+
+        return indices[query_idx], X_pool[indices[query_idx]]
 
 
 class RepresentativeWithClusteringSampling(Query):
@@ -573,36 +564,47 @@ class HighestEntropyUncertaintySampling(Query):
         return (entropy_clustering_indices[query_idx], instances)
 
 
+class OutliersWithRepresentativeSampling(Query):
+    """
+    Model-based Outliers and Representative Sampling
+    """
+    def __init__(self, n_instances: int,**kwargs) -> None:
+        """
+        Init UncertantySampling, ClusterBasedSampling and abstract class
+        """
+
+        self.representative_sampling = RepresentativeSampling(
+            n_instances=100,
+        )
+
+        self.outlier_sampling = OutlierSampling(
+            n_instances,
+            X_validation=kwargs.get("X_validation")
+        )
+        super().__init__(n_instances)
+
+
+    def __call__(self, classifier, X_pool):
+        """
+        self-> instance of AL technique
+        classifier -> ML model
+        pool-> set of unlabeled images to be used in AL technique
+
+        returns as images and corresponding indexes
+        """
+        indices, instancias = self.outlier_sampling(
+            classifier,
+            X_pool,
+        )
+    
+        indices = np.array(indices)  #convert list to numpy array
+        query_idx, data = self.representative_sampling(
+            classifier, X_pool[indices]
+        )
+
+        return indices[query_idx], data
 
 
 
-# def Model_Outliers_With_Representative_sampling(**kwargs):
-#     """
-#     Model-based Outliers and Representative Sampling
-#     """
-#     n_outliers_instances = kwargs.get("n_outliers_instances", 500)
-#     learner = kwargs.get("learner")
-#     unlabeled_data = kwargs.get("unlabeled_data")
-#     validation_data = kwargs.get("validation_data")
-#     n_instances = kwargs.get("n_instances")
-#     if learner is None:
-#         raise ValueError("Learner param is missing")
-#     if unlabeled_data is None:
-#         raise ValueError("unlabeled_data param is missing")
-#     if n_instances is None:
-#         raise ValueError("n_instances param is missing")
-#     if validation_data is None:
-#         raise ValueError("validation_data param is missing")
-
-#     indices, instancias = outlier_sampling(
-#         learner=learner,
-#         unlabeled_data=unlabeled_data,
-#         validation_data=validation_data,
-#         n_instances=n_outliers_instances,
-#     )
-#     indices = np.array(indices)  # convert list to numpy array
-#     query_idx, data = representative_sampling(
-#         learner=learner, unlabeled_data=instancias, n_instances=n_instances
-#     )
-#     return indices[query_idx], data
+    
 
