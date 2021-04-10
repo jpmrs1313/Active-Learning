@@ -5,6 +5,7 @@ from tensorflow.keras.applications.resnet50 import ResNet50
 from tensorflow.keras.applications.resnet_v2 import ResNet50V2
 from tensorflow.keras.applications.xception import Xception
 from tensorflow.keras.applications.inception_v3 import InceptionV3
+from sklearn.ensemble import GradientBoostingClassifier
 import tensorflow as tf
 
 input_shape = (128, 128, 3)

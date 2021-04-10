@@ -1,8 +1,9 @@
-from tensorflow.keras import optimizers
 import numpy as np
 import matplotlib.pyplot as plt
 from modAL.models import ActiveLearner
 from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
+from keras.preprocessing.image import save_img
+import os
 
 from query import Query
 
@@ -53,6 +54,9 @@ class ActiveLearner(ActiveLearner):
 
             model_accuracy = self.score(X_test, y_test, verbose=0)
             accuracy_values.append(model_accuracy)
+
+            self.save(X_unlabeled[query_idx], new_y)
+
             X_unlabeled = np.delete(X_unlabeled, query_idx, axis=0)
             print(
                 "\nAccuracy after query {n}: {acc:0.4f}".format(
@@ -60,6 +64,7 @@ class ActiveLearner(ActiveLearner):
                 )
             )
             i=i+1
+        
 
         return accuracy_values
 
@@ -71,29 +76,13 @@ class ActiveLearner(ActiveLearner):
         batch_size=32,
     ):
 
-        self.estimator.model.compile(
-            loss="binary_crossentropy",
-            optimizer=optimizers.RMSprop(lr=1e-4),
-            metrics=["acc"],
-        )
+
         self.teach(
             images,
             labels,
             epochs=epochs,
             batch_size=batch_size,
-            verbose=0,
         )
-
-        self.estimator.model.layers[0].trainable = True
-
-        self.estimator.model.compile(
-            loss="binary_crossentropy",
-            optimizer=optimizers.RMSprop(lr=0.00001),
-            metrics=["acc"],
-        )
-
-        self.estimator.model.fit(self.X_training, self.y_training, epochs=10)
-        self.estimator.model.layers[0].trainable = False
 
     def label(
         self,
@@ -148,3 +137,27 @@ class ActiveLearner(ActiveLearner):
 
         label = int(input())
         return label
+
+    def save(self,images,labels):
+        self.estimator.model.save_weights("model.h5")
+
+        list = os.listdir('images/informativa') # dir is your directory path
+        number_files = len(list)
+
+        list = os.listdir('images/nao_informativa') # dir is your directory path
+        number_files += len(list)
+
+        if not os.path.exists('images/informativa'):
+                    os.makedirs('images/informativa')
+
+        if not os.path.exists('images/nao_informativa'):
+                    os.makedirs('images/nao_informativa')
+       
+        for x,y in zip(images,labels):
+            number_files += 1
+            
+            if(y==0) : file_path=('images/informativa/' + str(number_files) + '.png')
+            if(y==1) : file_path=('images/nao_informativa/' + str(number_files) + '.png')
+
+            save_img(file_path, x) 
+

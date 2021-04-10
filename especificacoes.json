@@ -3,8 +3,7 @@
     "testing_path":"Datasets/test_set_complete",
     "validation_path":"Datasets/validation",
     "unlabeled_path":"Datasets/unlabeled",
-    "build_fn":"create_cnn",
-    "query_strategy":"RandomQuery",
+    "build_fn":"create_vgg16",
     "accuracy":0.98,
     "n_instances":10
 }

@@ -12,7 +12,6 @@ from query import (
     OutliersWithRepresentativeSampling,
     UncertaintyWithModelOutliersSampling
 )
-
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from active_learner import ActiveLearner
 import os
@@ -28,33 +27,34 @@ with open("especificacoes.json", "r") as myfile:
 obj = json.loads(data)
 
 datagen = ImageDataGenerator(rescale=1.0 / 255)
+
 train_generator = datagen.flow_from_directory(
     str(obj["training_path"]),
     target_size=(128, 128),
     batch_size=200,
     class_mode="binary",
-    shuffle=False,
+    shuffle=True,
 )
 test_generator = datagen.flow_from_directory(
     str(obj["testing_path"]),
     target_size=(128, 128),
-    batch_size=2200,
+    batch_size=500,
     class_mode="binary",
-    shuffle=False,
+    shuffle=True,
 )
 validation_generator = datagen.flow_from_directory(
     str(obj["validation_path"]),
     target_size=(128, 128),
     batch_size=200,
     class_mode="binary",
-    shuffle=False,
+    shuffle=True,
 )
 unlabeled_generator = datagen.flow_from_directory(
     str(obj["unlabeled_path"]),
     target_size=(128, 128),
-    batch_size=200,
+    batch_size=500,
     class_mode="binary",
-    shuffle=False,
+    shuffle=True,
 )
 
 X_initial, y_initial = next(train_generator)
@@ -65,11 +65,12 @@ X_unlabeled, y_unlabeled = next(unlabeled_generator)
 
 learner = ActiveLearner(
     locals()[obj["build_fn"]],
-    OutliersWithRepresentativeSampling(int(obj["n_instances"]),X_validation=X_validation),
+    UncertaintySampling(int(obj["n_instances"])),
     X_initial,
-    y_initial,
-    verbose=0
+    y_initial
 )
+
+learner.estimator.model.load_weights("model.h5")
 
 accuracy_values = learner.loop(
     X_test,
